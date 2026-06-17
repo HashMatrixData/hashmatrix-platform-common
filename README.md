@@ -1,8 +1,31 @@
 # hashmatrix-platform-common
 
-> hashmatrix 数据中台子模块 · 所属：平台横切
+> hashmatrix 数据中台子模块 · 所属：横切 · 平台公共能力
 >
 > 主仓：[HashMatrixData/hashmatrix](https://github.com/HashMatrixData/hashmatrix)
+
+## 角色与位置（一眼看懂）
+
+- **所属**：横切层 · 各分系统共享的平台公共能力（无状态 Spring Boot 应用）。
+- **一句话**：平台的"公共底盘"——调度 / 工作流引擎 / 统一元数据等被多个分系统复用的能力。
+- **协作**：governance / security / data-foundation 等 → 复用 **platform-common（调度/工作流/元数据）**。
+
+## 职责与边界
+
+- **做**：作业调度（DolphinScheduler）、工作流引擎（Flowable）、统一元数据、其它跨分系统公共服务。
+- **不做（边界）**：不做**租户生命周期/开通**（那是 `control-plane`）；不做某一分系统的业务逻辑。
+
+## 骨架技术选型（首选 · 待逐仓细化）
+
+| 维度 | 选型 |
+|--|--|
+| 运行时 | Spring Boot（Java） |
+| 调度 | **DolphinScheduler** |
+| 工作流引擎 | **Flowable** |
+| 公共依赖 | 主仓 `libs-java`（parent + BOM + `starter-tenant`） |
+| 业务库 | PostgreSQL |
+
+> 公共上下文能力（如 `starter-tenant` 租户透传）的契约在此与主仓 `libs-java` 对齐。
 
 ## 产品形态与多租户（北极星）
 
@@ -11,14 +34,6 @@
 **本仓视角**：公共能力**租户感知**，透传租户上下文、不跨租户默认共享。
 
 > 详见主仓 `docs/00-主仓初始化-spec.md`、`docs/architecture/05-多租户与控制平面.md`。
-
-## 职责
-
-调度(DolphinScheduler)、工作流(Flowable)、统一认证、元数据等公共能力。
-
-## 技术栈
-
-Java（**具体技术选型待独立讨论，逐步丰富**）
 
 ## 说明
 
