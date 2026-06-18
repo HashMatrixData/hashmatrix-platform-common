@@ -42,4 +42,31 @@
 
 平台横切公共能力：调度、工作流、统一认证、元数据等。
 
-技术栈与具体选型**待独立讨论后逐步丰富**，当前为初始脚手架。
+## 工程基座（脚手架现状）
+
+Java 17 · Spring Boot 3.3.5（经主仓 `hashmatrix-bom` 钉死）。以 Maven 坐标引用主仓公共制品（`<parent>` + import BOM，`relativePath` 留空），**只 clone 本仓即可构建**——前提是能访问制品仓（GitHub Packages，拉取需 `read:packages` PAT；内网用 `-Pxinchuang` 切私服）。
+
+- 依赖基线 **pin 到 libs-java v0.2.0**（含 `starter-audit` / `starter-observability`）。v0.2.0 发布到 GitHub Packages 前，构建无法解析这些制品——属预期门控，非代码问题。
+- 公共能力一律**租户感知**（`starter-tenant` 透传 `X-Tenant-*`），不做跨租户默认共享。
+- **职责边界**：不做租户生命周期 / 开通 / 配额（归 `control-plane`），不实现单一分系统业务逻辑。
+- 调度（DolphinScheduler）/ 工作流（Flowable）接线在后续 pass 接入（当前仅占位，`docker-compose.local.yml` 末尾留可选依赖注释）。
+
+本地独立运行：`mvn -DskipTests package` → `docker compose -f docker-compose.local.yml up --build` → `curl http://localhost:8080/actuator/health` 应 200。
+
+## 🔗 契约（Contracts）—— 跨子系统集成
+
+本项目经**契约**与其它子系统集成。契约的**单一事实源在主仓** `HashMatrixData/hashmatrix` 的 `contracts/`：
+- 索引（机器可读）`contracts/registry.yaml` · 规范 `contracts/CONVENTIONS.md` · 设计 `docs/architecture/06-契约治理.md`
+- 在线：https://github.com/HashMatrixData/hashmatrix/tree/main/contracts
+
+**铁律**：先改契约、再改实现；加法兼容默认放行，破坏性走 MAJOR + 弃用期双跑 + 通知消费方；消费方一律 tolerant reader。
+
+**本仓契约**：
+- producer：暂无
+- consumer：`icd/tenant-context-headers`、`icd/governance-metadata`
+
+**如何查阅（随时拉最新，勿存本地副本）**：
+- 在 superproject（`hashmatrix/services/<本仓>`）下：直接读 `../../contracts/`。
+- 独立 clone：WebFetch `https://raw.githubusercontent.com/HashMatrixData/hashmatrix/main/contracts/registry.yaml`（公开仓免鉴权）→ 按 registry 取对应契约；或 `gh api repos/HashMatrixData/hashmatrix/contents/contracts/<path> -H "Accept: application/vnd.github.raw"`。
+
+技术栈与具体选型**待独立讨论后逐步丰富**。

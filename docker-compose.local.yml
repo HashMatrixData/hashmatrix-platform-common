@@ -1,0 +1,58 @@
+# 本地独立运行 / 调试编排：业务库 PostgreSQL + 平台公共能力服务。
+# 🔴 红线：以下口令均为本地脱敏占位，仅用于本地起栈；勿用于任何真实环境。
+#
+# 用法：
+#   mvn -DskipTests package           # 先产出 target/platform-common-*.jar（app 镜像依赖它）
+#   docker compose -f docker-compose.local.yml up --build
+#   curl -fsS http://localhost:8080/actuator/health   # 期望 200 且 status=UP
+#
+# 注：DolphinScheduler / Flowable 依赖为「可选」，默认不起（接线在后续 pass 接入），见文末注释块。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: platform_common
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform-local-dev   # 本地占位口令，仅本机可见
+    ports:
+      - "5432:5432"
+    volumes:
+      - platform-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform -d platform_common"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  platform-common:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PLATFORM_DB_URL: jdbc:postgresql://postgres:5432/platform_common
+      PLATFORM_DB_USER: platform
+      PLATFORM_DB_PASSWORD: platform-local-dev
+    ports:
+      - "8080:8080"
+    # 容器内 HEALTHCHECK 见 Dockerfile（命中 /actuator/health/liveness）。
+
+volumes:
+  platform-pgdata:
+
+# ──────────────────────────────────────────────────────────────────────────
+# 可选依赖（后续接线时启用，取消注释；接线 pass 会补 starter/auto-config）：
+#
+#   dolphinscheduler:
+#     image: apache/dolphinscheduler-standalone-server:<pin-version>
+#     ports: ["12345:12345"]
+#     # 调度接线：服务侧仅验证「可起 + 连通」，不建任何业务作业。
+#
+#   flowable:
+#     image: flowable/flowable-rest:<pin-version>
+#     ports: ["8081:8080"]
+#     # 工作流接线：验证 Flowable 引擎可起；不建任何业务流程定义。
+# ──────────────────────────────────────────────────────────────────────────
