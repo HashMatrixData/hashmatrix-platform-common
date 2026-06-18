@@ -1,0 +1,45 @@
+# 平台横切公共能力服务 —— 基线配置
+# 🔴 红线：不含任何真实凭据/主机/客户信息。以下均为本地脱敏占位，生产经环境变量/Secret 注入覆盖。
+
+spring:
+  application:
+    name: platform-common
+  datasource:
+    # 业务库 PostgreSQL：默认指向 docker-compose.local.yml 的本地实例；真实环境经 env 覆盖。
+    url: ${PLATFORM_DB_URL:jdbc:postgresql://localhost:5432/platform_common}
+    username: ${PLATFORM_DB_USER:platform}
+    # 本地开发占位口令；生产务必经 PLATFORM_DB_PASSWORD 注入，勿沿用默认值。
+    password: ${PLATFORM_DB_PASSWORD:platform-local-dev}
+    hikari:
+      pool-name: platform-common-pool
+      # 启动不因 DB 暂不可用而失败：连接在首次使用时建立，健康探针如实反映 DB 状态。
+      initialization-fail-timeout: -1
+
+# 多租户：透传 X-Tenant-* 头 → TenantContext（公共能力租户感知）。
+# required=false：信任边缘网关已强制租户（见 contracts/icd·tenant-context-headers §4）。
+hashmatrix:
+  tenant:
+    enabled: true
+    required: false
+  # audit / observability starter 采用各自默认（审计走 slf4j 结构化并自动加盖当前租户；
+  # 指标出口 /actuator/prometheus 由 starter-observability 提供）。需定制时在此覆盖 hashmatrix.audit.* / hashmatrix.observability.*。
+
+# 健康检查 / 可观测：仅暴露探针、info 与指标出口；其余 actuator 端点默认不外露。
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true          # 暴露 health/liveness、health/readiness 子路径组（Dockerfile HEALTHCHECK 与 k8s 探针依赖此项，勿删）
+      show-details: when-authorized
+  health:
+    db:
+      enabled: true            # 业务库连通纳入健康判定
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: 平台横切公共能力服务基座（调度/工作流/统一元数据）

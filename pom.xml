@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    平台横切公共能力服务（调度 / 工作流 / 统一元数据基座）。
+    以「Maven 坐标」引用主仓公共制品（不依赖 submodule 路径）：<parent> + import BOM，
+    relativePath 留空 = 强制从制品仓解析，故只 clone 本仓、能访问制品仓即可 `mvn package`。
+
+    ⚠️ 依赖基线 pin 到 libs-java v0.2.0（含 starter-audit / starter-observability，见 issue #1 / 主仓 #1）。
+       v0.2.0 发布到 GitHub Packages 前，parent/bom/audit/observability 无法解析，构建会红——属预期门控。
+  -->
+  <parent>
+    <groupId>io.hashmatrix</groupId>
+    <artifactId>hashmatrix-platform-parent</artifactId>
+    <version>0.2.0</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>io.hashmatrix</groupId>
+  <artifactId>platform-common</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>platform-common</name>
+  <description>平台横切公共能力服务基座：统一返回/异常/审计/可观测 + 多租户透传（调度/工作流接线后续接入）。</description>
+
+  <properties>
+    <!--
+      spring-boot-maven-plugin 的版本：须与 hashmatrix-bom 钉死的 spring-boot.version 对齐。
+      import 作用域只引入 dependencyManagement、不引入 BOM 的 properties，故此处显式声明一份，
+      升级时与 BOM 同步改动（BOM 是开发框架版本的唯一来源）。
+    -->
+    <spring-boot.version>3.3.5</spring-boot.version>
+    <!-- 本服务不作为库发布到制品仓（应用以镜像交付）。 -->
+    <maven.deploy.skip>true</maven.deploy.skip>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- 开发框架版本唯一来源：import hashmatrix-bom（与 <parent> 配合 = 子仓标准接入姿势） -->
+      <dependency>
+        <groupId>io.hashmatrix</groupId>
+        <artifactId>hashmatrix-bom</artifactId>
+        <version>0.2.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- ===== Web 基座（版本均由 BOM 钉死，子仓不写版本号） ===== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <!-- 健康检查 / 可观测：Actuator 探针（liveness/readiness）；指标出口由 starter-observability 提供 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <!-- 业务库 PostgreSQL 连通（DataSource + db 健康探针） -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- ===== 平台公共 starter（随 hashmatrix-bom 同版本，免写版本号） ===== -->
+    <!-- 多租户：X-Tenant-* 头 → TenantContext 透传（公共能力租户感知，不做跨租户默认共享） -->
+    <dependency>
+      <groupId>io.hashmatrix</groupId>
+      <artifactId>hashmatrix-starter-tenant</artifactId>
+    </dependency>
+    <!-- 统一返回 ApiResponse + 全局异常处理 -->
+    <dependency>
+      <groupId>io.hashmatrix</groupId>
+      <artifactId>hashmatrix-starter-web</artifactId>
+    </dependency>
+    <!-- 统一审计 AuditEvent / AuditRecorder（自动加盖当前租户，取自 starter-tenant） -->
+    <dependency>
+      <groupId>io.hashmatrix</groupId>
+      <artifactId>hashmatrix-starter-audit</artifactId>
+    </dependency>
+    <!-- actuator 健康探针 + /actuator/prometheus 指标出口 + 平台公共指标标签（OTel 走部署期 Java agent） -->
+    <dependency>
+      <groupId>io.hashmatrix</groupId>
+      <artifactId>hashmatrix-starter-observability</artifactId>
+    </dependency>
+
+    <!--
+      测试栈：starter-test 以 test 作用域一并带入 spring-boot-starter-test（JUnit5/AssertJ/Mockito/spring-test）
+      + Testcontainers（junit-jupiter + postgresql）+ 脱敏 fixtures（MockTenants/MockData）。集成切片起 PG 即用其传递依赖。
+    -->
+    <dependency>
+      <groupId>io.hashmatrix</groupId>
+      <artifactId>hashmatrix-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- 可执行 fat-jar：应用以镜像交付，需可独立 `java -jar` 启动 -->
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        集成测试（*IT）走 failsafe，绑定到 verify 阶段：
+        `mvn package` 仅跑单测（surefire，无需 Docker）；`mvn verify` 追加 Testcontainers 集成测试（需 Docker）。
+        plugin 版本由 parent 的 pluginManagement 统一管理。
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!--
+    制品仓 = GitHub Packages（公共 starter / parent / bom 由此解析）。
+    拉取需 ~/.m2/settings.xml 配置 id=github 的 server（带 read:packages 的 PAT，经环境变量注入，勿写明文）。
+    内网/信创交付：用 parent 的 -Pxinchuang 将仓库切到内网私服（见 libs-java/README「内网/信创交付」）。
+  -->
+  <repositories>
+    <repository>
+      <id>github</id>
+      <name>GitHub Packages · HashMatrixData/hashmatrix</name>
+      <url>https://maven.pkg.github.com/HashMatrixData/hashmatrix</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>github</id>
+      <name>GitHub Packages · HashMatrixData/hashmatrix</name>
+      <url>https://maven.pkg.github.com/HashMatrixData/hashmatrix</url>
+    </pluginRepository>
+  </pluginRepositories>
+</project>

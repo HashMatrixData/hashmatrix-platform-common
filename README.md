@@ -13,16 +13,16 @@
 ## 职责与边界
 
 - **做**：作业调度（DolphinScheduler）、工作流引擎（Flowable）、统一元数据、其它跨分系统公共服务。
-- **不做（边界）**：不做**租户生命周期/开通**（那是 `control-plane`）；不做某一分系统的业务逻辑。
+- **不做（边界）**：不做**租户生命周期/开通/配额**（那是 `control-plane`）；不实现某一分系统的业务逻辑。公共能力一律**租户感知**、不跨租户默认共享。
 
 ## 骨架技术选型（首选 · 待逐仓细化）
 
 | 维度 | 选型 |
 |--|--|
-| 运行时 | Spring Boot（Java） |
+| 运行时 | **Spring Boot 3.3.5（Java 17）**——经主仓 `hashmatrix-bom` 钉死，升级=改 BOM 一行 |
 | 调度 | **DolphinScheduler** |
 | 工作流引擎 | **Flowable** |
-| 公共依赖 | 主仓 `libs-java`（parent + BOM + `starter-tenant`） |
+| 公共依赖 | 主仓 `libs-java`：`hashmatrix-platform-parent` + import `hashmatrix-bom` + `hashmatrix-starter-{tenant,web,audit,observability,test}` |
 | 业务库 | PostgreSQL |
 
 > 公共上下文能力（如 `starter-tenant` 租户透传）的契约在此与主仓 `libs-java` 对齐。
@@ -35,9 +35,29 @@
 
 > 详见主仓 `docs/00-主仓初始化-spec.md`、`docs/architecture/05-多租户与控制平面.md`。
 
+## 构建与运行
+
+需 **JDK 17 + Maven 3.8+**，且能访问制品仓（GitHub Packages，拉取需带 `read:packages` 的 PAT，配 `~/.m2/settings.xml` 的 `id=github` server；内网用 `-Pxinchuang` 切私服）。
+
+```bash
+mvn -DskipTests package          # 单测随 package 跑（surefire）；产出可执行 fat-jar
+mvn verify                       # 追加 Testcontainers 集成测试（需 Docker）
+
+# 本地独立起栈（PostgreSQL + 服务）
+docker compose -f docker-compose.local.yml up --build
+curl -fsS http://localhost:8080/actuator/health     # 期望 200，status=UP
+```
+
+端点：`GET /api/platform/info`（统一 `ApiResponse`，含当前租户标注）、`/actuator/health`（含 `health/liveness`、`health/readiness`）、`/actuator/info`、`/actuator/prometheus`。
+
+> ⚠️ **当前依赖门控**：基线 pin 到 **libs-java v0.2.0**（含 `starter-audit` / `starter-observability`）。
+> v0.2.0 发布到 GitHub Packages 前，`mvn package` 无法解析 parent/bom/audit/observability，构建会红——
+> 属预期状态，非本仓代码问题。v0.2.0 就绪后即可绿。详见 issue #1 与主仓 #1。
+
 ## 说明
 
-本仓库作为 `hashmatrix` 主仓的 git submodule，挂载于 `services/platform-common`。架构背景见主仓 `docs/architecture/`。
+本仓库作为 `hashmatrix` 主仓的 git submodule，挂载于 `services/platform-common`。架构背景见主仓 `docs/architecture/`；
+跨子系统集成契约见主仓 `contracts/`（本仓为 `icd/tenant-context-headers`、`icd/governance-metadata` 的消费方，详见 `CLAUDE.md`）。
 
 ## License
 
