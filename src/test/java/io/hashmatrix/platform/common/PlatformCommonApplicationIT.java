@@ -25,7 +25,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *
  * <p>容器口令为<strong>临时脱敏占位</strong>（仅测试 JVM 内可见，容器随测试销毁），不入任何配置/制品。
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// 独立管理端口（application.yml: management.server.port=9089）会把 actuator 搬到 TestRestTemplate
+// 够不到的管理子上下文（→ /actuator/** 404）。测试期置空 management.server.port，把 actuator 收回主
+// （随机）端口上下文，使 /actuator/health 经 TestRestTemplate 可达；真实双端口绑定由 Dockerfile/compose/k8s 覆盖。
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "management.server.port=")
 @Testcontainers
 class PlatformCommonApplicationIT {
 

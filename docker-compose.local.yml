@@ -1,10 +1,9 @@
 # 本地独立运行 / 调试编排：业务库 PostgreSQL + 平台公共能力服务。
 # 🔴 红线：以下口令均为本地脱敏占位，仅用于本地起栈；勿用于任何真实环境。
 #
-# 用法：
-#   mvn -DskipTests package           # 先产出 target/platform-common-*.jar（app 镜像依赖它）
-#   docker compose -f docker-compose.local.yml up --build
-#   curl -fsS http://localhost:8080/actuator/health   # 期望 200 且 status=UP
+# 用法（需 compose v2，默认启用 BuildKit；镜像 build 阶段经 ~/.m2/settings.xml 解析公共依赖，见文末 secrets）：
+#   docker compose -f docker-compose.local.yml up --build   # build 阶段在镜像内 mvn package（免先在宿主 package）
+#   curl -fsS http://localhost:9089/actuator/health          # 期望 200 且 status=UP（健康检查在管理端口 9089）
 #
 # 注：DolphinScheduler / Flowable 依赖为「可选」，默认不起（接线在后续 pass 接入），见文末注释块。
 
@@ -29,6 +28,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # 镜像 build 阶段经 GitHub Packages 解析公共依赖，需 Maven settings.xml（含 read:packages PAT）。
+      # 经 BuildKit secret 注入开发者自身 ~/.m2/settings.xml，不落镜像层（红线）。
+      secrets:
+        - maven_settings
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,11 +40,17 @@ services:
       PLATFORM_DB_USER: platform
       PLATFORM_DB_PASSWORD: platform-local-dev
     ports:
-      - "8080:8080"
-    # 容器内 HEALTHCHECK 见 Dockerfile（命中 /actuator/health/liveness）。
+      - "8089:8089"   # 应用 HTTP
+      - "9089:9089"   # 管理/actuator（健康检查、指标出口）
+    # 容器内 HEALTHCHECK 见 Dockerfile（命中管理端口 9089 的 /actuator/health/liveness）。
 
 volumes:
   platform-pgdata:
+
+# 镜像 build 阶段所需 Maven 凭据：取开发者本机 ~/.m2/settings.xml（id=github server，含 read:packages PAT）。
+secrets:
+  maven_settings:
+    file: ${HOME}/.m2/settings.xml
 
 # ──────────────────────────────────────────────────────────────────────────
 # 可选依赖（后续接线时启用，取消注释；接线 pass 会补 starter/auto-config）：
