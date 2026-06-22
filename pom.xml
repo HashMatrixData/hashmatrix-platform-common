@@ -130,6 +130,15 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
+        <!--
+          扫描松散 class 目录而非 spring-boot:repackage 产出的 fat-jar：repackage（package 阶段）会把主 jar
+          换成 fat-jar，应用类挪到 BOOT-INF/classes/ 下；failsafe（verify 阶段）若用该 jar，Spring 的
+          @SpringBootConfiguration 包扫描（io/hashmatrix/platform/common/**）扫不到入口类 → IT 报
+          "Unable to find a @SpringBootConfiguration"。指向 target/classes 即可（类在包根，扫描命中）。
+        -->
+        <configuration>
+          <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+        </configuration>
         <executions>
           <execution>
             <goals>
