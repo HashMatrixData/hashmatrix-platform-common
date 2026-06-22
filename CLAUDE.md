@@ -51,7 +51,9 @@ Java 17 · Spring Boot 3.3.5（经主仓 `hashmatrix-bom` 钉死）。以 Maven 
 - **职责边界**：不做租户生命周期 / 开通 / 配额（归 `control-plane`），不实现单一分系统业务逻辑。
 - 调度（DolphinScheduler）/ 工作流（Flowable）接线在后续 pass 接入（当前仅占位，`docker-compose.local.yml` 末尾留可选依赖注释）。
 
-本地独立运行：`mvn -DskipTests package` → `docker compose -f docker-compose.local.yml up --build` → `curl http://localhost:8080/actuator/health` 应 200。
+- **端口基线（主仓 M1 §3）**：应用 HTTP=**8089**、管理/actuator=**9089**（`management.server.port` 独立）；均 `${SERVER_PORT:8089}` / `${MANAGEMENT_SERVER_PORT:9089}` 可覆盖，勿在本仓硬编码其它值。
+
+本地独立运行：`docker compose -f docker-compose.local.yml up --build` → `curl http://localhost:9089/actuator/health` 应 200（健康检查在管理端口 9089；镜像 build 阶段经 BuildKit secret 注入 `~/.m2/settings.xml` 解析公共依赖）。
 
 ## 🔗 契约（Contracts）—— 跨子系统集成
 
@@ -63,7 +65,8 @@ Java 17 · Spring Boot 3.3.5（经主仓 `hashmatrix-bom` 钉死）。以 Maven 
 
 **本仓契约**：
 - producer：暂无
-- consumer：`icd/tenant-context-headers`、`icd/governance-metadata`
+- consumer：`icd/tenant-context-headers`、`icd/governance-metadata`、`openapi/governance-metadata-v1`、`asyncapi/governance-metadata`
+  （后三者为 governance 元数据契约族：ICD 总纲 + REST 同步供数 §2 细化 + 异步变更事件 §3 细化；均 tolerant reader 消费）
 
 **如何查阅（随时拉最新，勿存本地副本）**：
 - 在 superproject（`hashmatrix/services/<本仓>`）下：直接读 `../../contracts/`。

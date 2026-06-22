@@ -1,6 +1,11 @@
 # 平台横切公共能力服务 —— 基线配置
 # 🔴 红线：不含任何真实凭据/主机/客户信息。以下均为本地脱敏占位，生产经环境变量/Secret 注入覆盖。
 
+# 端口基线（主仓 M1 §3）：应用 HTTP=8089、管理/actuator=9089（management.server.port 独立）；
+# 均 ${ENV:默认} 可覆盖、由根 Makefile 驱动，勿在本仓硬编码其它值（避免同机并行端口冲突）。
+server:
+  port: ${SERVER_PORT:8089}
+
 spring:
   application:
     name: platform-common
@@ -26,6 +31,9 @@ hashmatrix:
 
 # 健康检查 / 可观测：仅暴露探针、info 与指标出口；其余 actuator 端点默认不外露。
 management:
+  server:
+    # 管理端口独立于应用端口（主仓 M1 §3 端口基线）。actuator/探针/指标均经此端口（9089）出口。
+    port: ${MANAGEMENT_SERVER_PORT:9089}
   endpoints:
     web:
       exposure:
